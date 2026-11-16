@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flappy Cave: Ashen Flight</title>
+    <style>
+      :root {
+        --bg: #070b11;
+        --panel: rgba(17, 21, 28, 0.76);
+        --panel-border: rgba(148, 168, 191, 0.35);
+        --gold: #f7d36d;
+        --steel: #a7b5c0;
+        --flame: #ff964a;
+        --blood: #ff4a4a;
+        --soul: #8ae7ff;
+        --emerald: #7ef0a8;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        font-family: Inter, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(94, 112, 132, 0.18), transparent 42%),
+          linear-gradient(180deg, #04070b 0%, #0b1016 100%);
+        color: #edf4ff;
+        overflow: hidden;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+
+      .game-wrap {
+        position: relative;
+        width: min(94vw, 1024px);
+        aspect-ratio: 16 / 9;
+        border-radius: 18px;
+        border: 1px solid rgba(160, 175, 200, 0.28);
+        background: rgba(9, 13, 18, 0.75);
+        box-shadow:
+          0 24px 60px rgba(0, 0, 0, 0.55),
+          inset 0 0 24px rgba(120, 180, 255, 0.08);
+        overflow: hidden;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(180deg, #070b10 0%, #0f1a20 100%);
+      }
+
+      .hud {
+        position: absolute;
+        inset: 16px 18px auto 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        pointer-events: none;
+      }
+
+      .hud-box {
+        background: rgba(14, 20, 27, 0.56);
+        border: 1px solid rgba(188, 203, 218, 0.2);
+        border-radius: 10px;
+        padding: 8px 12px;
+        backdrop-filter: blur(2px);
+      }
+
+      .brand {
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--steel);
+      }
+
+      .score {
+        font-size: clamp(1rem, 2.2vw, 2rem);
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: var(--gold);
+        letter-spacing: 0.05em;
+      }
+
+      .title-card {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: min(80%, 520px);
+        background: rgba(11, 17, 24, 0.8);
+        border: 1px solid rgba(167, 190, 214, 0.28);
+        border-radius: 18px;
+        text-align: center;
+        padding: 20px 20px 18px;
+        box-shadow: 0 18px 36px rgba(0,0,0,0.35);
+      }
+
+      .title-card.hidden {
+        display: none;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(2rem, 3vw, 3.2rem);
+        letter-spacing: 0.06em;
+        line-height: 1.1;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: #d0dcee;
+        font-size: 0.82rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .controls {
+        margin-top: 18px;
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid rgba(223, 233, 248, 0.24);
+        background: linear-gradient(180deg, rgba(14, 24, 35, 0.9), rgba(19, 32, 44, 0.9));
+        color: #ecf4ff;
+        border-radius: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 12px 18px;
+        cursor: pointer;
+        transition: transform 100ms ease, box-shadow 100ms ease;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+      }
+
+      button:hover { transform: translateY(-1px); }
+      button:active { transform: translateY(1px); }
+
+      .gold { border-color: rgba(247, 211, 109, 0.48); }
+      .hint {
+        margin-top: 12px;
+        color: #c4d0dc;
+        font-size: 0.78rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game-wrap">
+      <canvas id="game" width="1024" height="576"></canvas>
+
+      <div class="hud">
+        <div class="hud-box brand">MOURNFUL CAVE</div>
+        <div class="hud-box score" id="score">0</div>
+      </div>
+
+      <div class="title-card" id="title-card">
+        <h1>FLAPPY CAVE</h1>
+        <p class="subtitle">Ashen Flight / Lord of the Hollow</p>
+        <div class="controls">
+          <button class="gold" id="start-btn">Enter the cave</button>
+        </div>
+        <div class="hint">Tap, click, or press space to flap.</div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const scoreEl = document.getElementById('score');
+      const titleCard = document.getElementById('title-card');
+      const startBtn = document.getElementById('start-btn');
+
+      const game = {
+        state: 'menu',
+        lastTime: 0,
+        score: 0,
+        difficulty: 1,
+        pipes: [],
+        spawnTimer: 0,
+        bossNames: ['Asylum Demon', 'Capra', 'Ornstein', 'Dancer', 'Gwyn', 'Elder Prince'],
+      };
+
+      const player = {
+        x: 170,
+        y: canvas.height / 2,
+        radius: 19,
+        velocity: 0,
+        rotation: 0,
+      };
+
+      function resetGame() {
+        player.x = 170;
+        player.y = canvas.height / 2;
+        player.velocity = 0;
+        player.rotation = 0;
+        game.pipes = [];
+        game.score = 0;
+        game.difficulty = 1;
+        game.spawnTimer = 0;
+        scoreEl.textContent = '0';
+      }
+
+      function startGame() {
+        resetGame();
+        game.state = 'playing';
+        titleCard.classList.add('hidden');
+      }
+
+      function endGame(won = false) {
+        game.state = won ? 'victory' : 'gameover';
+        titleCard.classList.remove('hidden');
+        titleCard.innerHTML = won
+          ? '<h1>YOU PREVAILED</h1><p class="subtitle">The cave falls silent.</p><div class="controls"><button class="gold" id="restart-btn">Fight again</button></div><div class="hint">You cleared the bosses in the flappy abyss.</div>'
+          : '<h1>YOU DIED</h1><p class="subtitle">The hollow bird returns to ash.</p><div class="controls"><button class="gold" id="restart-btn">Try again</button></div><div class="hint">Tap, click, or press space to rise.</div>';
+        const restartBtn = document.getElementById('restart-btn');
+        restartBtn.addEventListener('click', () => {
+          startGame();
+        }, { once: true });
+      }
+
+      function flap() {
+        if (game.state === 'menu') {
+          startGame();
+        }
+        if (game.state !== 'playing') return;
+        player.velocity = -8.5;
+      }
+
+      function spawnPipe() {
+        const width = 82;
+        const gap = 180 - Math.min(55, (game.score * 2.8));
+        const minTop = 110;
+        const maxTop = canvas.height - gap - 120;
+        const top = minTop + Math.random() * (maxTop - minTop);
+
+        game.pipes.push({
+          x: canvas.width + 50,
+          width,
+          top,
+          gap,
+          passed: false,
+          boss: game.bossNames[Math.floor(Math.random() * game.bossNames.length)],
+          hue: 180 + Math.random() * 80,
+        });
+      }
+
+      function handleInput(event) {
+        if (event.type === 'keydown' && event.code !== 'Space') return;
+        event.preventDefault();
+        flap();
+      }
+
+      window.addEventListener('keydown', handleInput);
+      canvas.addEventListener('pointerdown', handleInput);
+      startBtn.addEventListener('click', () => startGame());
+
+      function update(delta) {
+        if (game.state !== 'playing') return;
+
+        player.velocity += 0.42 * delta * 0.06;
+        player.y += player.velocity * delta * 0.06;
+        player.rotation = Math.max(-1.2, Math.min(1.2, player.velocity / 12));
+
+        game.spawnTimer += delta;
+        const interval = Math.max(1200, 1700 - game.score * 40);
+        if (game.spawnTimer >= interval) {
+          spawnPipe();
+          game.spawnTimer = 0;
+        }
+
+        const speed = 4 + game.score * 0.12;
+        for (let i = game.pipes.length - 1; i >= 0; i--) {
+          const pipe = game.pipes[i];
+          pipe.x -= speed * delta * 0.06;
+
+          if (!pipe.passed && pipe.x + pipe.width < player.x) {
+            pipe.passed = true;
+            game.score += 1;
+            scoreEl.textContent = String(game.score);
+          }
+
+          if (pipe.x + pipe.width < -20) {
+            game.pipes.splice(i, 1);
+          }
+        }
+
+        if (player.y - player.radius < 0 || player.y + player.radius > canvas.height - 20) {
+          endGame(false);
+        }
+
+        for (const pipe of game.pipes) {
+          const collidesX = player.x + player.radius > pipe.x && player.x - player.radius < pipe.x + pipe.width;
+          const collidesTop = player.y - player.radius < pipe.top;
+          const collidesBottom = player.y + player.radius > pipe.top + pipe.gap;
+          if (collidesX && (collidesTop || collidesBottom)) {
+            endGame(false);
+            break;
+          }
+        }
+
+        if (game.score >= 10) {
+          endGame(true);
+        }
+      }
+
+      function drawBackground() {
+        const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        sky.addColorStop(0, '#04070b');
+        sky.addColorStop(0.5, '#0b1018');
+        sky.addColorStop(1, '#111b22');
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < 26; i++) {
+          const x = (i * 81 + (performance.now() * 0.015) % 200) % (canvas.width + 120) - 60;
+          const y = 40 + (i * 31) % (canvas.height - 160);
+          ctx.fillStyle = 'rgba(178, 195, 206, 0.18)';
+          ctx.fillRect(x, y, 2, 10);
+          ctx.fillStyle = 'rgba(255, 146, 74, 0.2)';
+          ctx.fillRect(x + 2, y + 1, 2, 8);
+        }
+
+        ctx.fillStyle = 'rgba(210, 227, 240, 0.04)';
+        for (let i = 0; i < 12; i++) {
+          const x = i * 92 + 15;
+          const y = 40 + ((i * 37) % 160);
+          ctx.beginPath();
+          ctx.moveTo(x, y + 10);
+          ctx.lineTo(x + 10, y);
+          ctx.lineTo(x + 28, y + 14);
+          ctx.lineTo(x + 10, y + 32);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        ctx.fillStyle = 'rgba(109, 129, 140, 0.2)';
+        for (let i = 0; i < 18; i++) {
+          const baseY = canvas.height - 18 - i * 14;
+          ctx.fillRect(0, baseY, canvas.width, 2);
+        }
+      }
+
+      function drawPipes() {
+        for (const pipe of game.pipes) {
+          const topH = pipe.top;
+          const bottomY = pipe.top + pipe.gap;
+          const bottomH = canvas.height - bottomY - 18;
+
+          ctx.fillStyle = '#19242c';
+          ctx.fillRect(pipe.x, 0, pipe.width, topH);
+          ctx.fillRect(pipe.x, bottomY, pipe.width, bottomH);
+
+          ctx.fillStyle = '#2f4049';
+          ctx.fillRect(pipe.x - 6, 0, pipe.width + 12, 16);
+          ctx.fillRect(pipe.x - 6, bottomY + pipe.gap - 16, pipe.width + 12, 16);
+
+          ctx.strokeStyle = '#a7b9c6';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(pipe.x + 2, 12, pipe.width - 4, topH - 18);
+          ctx.strokeRect(pipe.x + 2, bottomY + 18, pipe.width - 4, bottomH - 18);
+
+          ctx.fillStyle = 'rgba(228, 155, 121, 0.25)';
+          ctx.fillRect(pipe.x + 12, topH - 10, pipe.width - 24, 10);
+          ctx.fillRect(pipe.x + 12, bottomY + pipe.gap, pipe.width - 24, 10);
+
+          const eyeY = pipe.top + pipe.gap / 2;
+          const eyeX = pipe.x + pipe.width / 2;
+          drawBossFace(eyeX, eyeY, pipe.width * 0.75, pipe.boss, pipe.hue);
+        }
+      }
+
+      function drawBossFace(x, y, size, bossName, hue) {
+        ctx.save();
+        ctx.translate(x, y);
+
+        ctx.fillStyle = `hsla(${hue}, 58%, 18%, 0.88)`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, size * 0.64, size * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255, 118, 86, 0.12)';
+        ctx.fillRect(-size * 0.1, -size * 0.5, size * 0.2, size);
+
+        ctx.fillStyle = '#f4d484';
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.6, -size * 0.4);
+        ctx.lineTo(-size * 0.2, -size * 0.82);
+        ctx.lineTo(size * 0.2, -size * 0.82);
+        ctx.lineTo(size * 0.6, -size * 0.4);
+        ctx.fill();
+
+        ctx.fillStyle = '#d4dfeb';
+        ctx.fillRect(-size * 0.22, -size * 0.12, size * 0.16, size * 0.2);
+        ctx.fillRect(size * 0.06, -size * 0.12, size * 0.16, size * 0.2);
+
+        ctx.fillStyle = '#ff5d4a';
+        ctx.beginPath();
+        ctx.arc(-size * 0.14, -size * 0.06, size * 0.1, 0, Math.PI * 2);
+        ctx.arc(size * 0.14, -size * 0.06, size * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.28, size * 0.2);
+        ctx.quadraticCurveTo(0, size * 0.48, size * 0.28, size * 0.2);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(200, 217, 230, 0.8)';
+        ctx.font = '600 12px Segoe UI';
+        ctx.textAlign = 'center';
+        ctx.fillText(bossName.slice(0, 10), 0, size * 0.82);
+
+        ctx.restore();
+      }
+
+      function drawPlayer() {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.rotation);
+
+        const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 38);
+        glow.addColorStop(0, 'rgba(140, 230, 255, 0.95)');
+        glow.addColorStop(0.3, 'rgba(138, 231, 255, 0.7)');
+        glow.addColorStop(1, 'rgba(138, 231, 255, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, 42, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#dfeaf7';
+        ctx.beginPath();
+        ctx.ellipse(0, 5, 20, 18, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#0d1116';
+        ctx.beginPath();
+        ctx.moveTo(-14, -10);
+        ctx.lineTo(-1, -2);
+        ctx.lineTo(-14, 8);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(14, -10);
+        ctx.lineTo(1, -2);
+        ctx.lineTo(14, 8);
+        ctx.fill();
+
+        ctx.fillStyle = '#f2d872';
+        ctx.beginPath();
+        ctx.arc(-6, -3, 3.2, 0, Math.PI * 2);
+        ctx.arc(6, -3, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#eceff2';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-7, 9);
+        ctx.quadraticCurveTo(0, 15, 7, 9);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      function drawFog() {
+        const alpha = 0.18 + Math.sin(performance.now() * 0.0015) * 0.04;
+        ctx.fillStyle = `rgba(167, 187, 209, ${alpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      function render() {
+        drawBackground();
+        drawPipes();
+        drawPlayer();
+        drawFog();
+
+        if (game.state === 'menu' || game.state === 'victory' || game.state === 'gameover') {
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      function loop(timestamp) {
+        const delta = timestamp - game.lastTime || 16;
+        game.lastTime = timestamp;
+        update(delta);
+        render();
+        requestAnimationFrame(loop);
+      }
+
+      resetGame();
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>
